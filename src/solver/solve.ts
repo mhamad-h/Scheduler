@@ -3,6 +3,7 @@ import { courseKey, DAY_NAMES, fmtTime } from '../data/types.ts';
 import type { Candidate, Features, Filters, Group, Schedule, SolveInput, SolveResult, Weights } from './model.ts';
 import { cost, CUSTOM_ID, PRESETS } from './rank.ts';
 import { poolCourses } from './pool.ts';
+import { courseCredits } from '../data/credits.ts';
 
 const popcount = (n: number) => {
   n = n - ((n >> 1) & 0x55555555);
@@ -179,7 +180,7 @@ export function solve(input: SolveInput): SolveResult {
       const byKey = new Map<string, number[]>();
       for (const i of keep) {
         const s = sections[i];
-        const sig = s.campus + '|' + s.ins.join(',') + '|' + s.m.map((m) => `${m.d}.${m.s}.${m.e}.${m.dt ?? ''}`).sort().join(';');
+        const sig = s.cr + '|' + s.campus + '|' + s.ins.join(',') + '|' + s.m.map((m) => `${m.d}.${m.s}.${m.e}.${m.dt ?? ''}`).sort().join(';');
         (byKey.get(sig) ?? byKey.set(sig, []).get(sig)!).push(i);
       }
       const cands: number[] = [];
@@ -218,7 +219,7 @@ export function solve(input: SolveInput): SolveResult {
     const byKey = new Map<string, { list: number[]; topics: number[] }>();
     for (const { i, ord } of keep) {
       const s = sections[i];
-      const sig = s.campus + '|' + (prefersAnyProf ? s.ins.join(',') : '') + '|' + s.m.map((m) => `${m.d}.${m.s}.${m.e}.${m.dt ?? ''}`).sort().join(';');
+      const sig = s.cr + '|' + s.campus + '|' + (prefersAnyProf ? s.ins.join(',') : '') + '|' + s.m.map((m) => `${m.d}.${m.s}.${m.e}.${m.dt ?? ''}`).sort().join(';');
       const e = byKey.get(sig);
       if (e) {
         e.list.push(i);
@@ -282,12 +283,30 @@ export function solve(input: SolveInput): SolveResult {
   const rep = candidates.map((c) => sections[c.sections[0]]);
   const candDays = rep.map((s) => s.m.reduce((a, m) => a | m.d, 0));
   const physical = (s: Section) => s.campus !== 'Online' && s.campus !== 'Other';
+
+  // Credit pairing: when a course's credits are split between its two components in more than one
+  // way (COE 211: 4-cr lecture + 0-cr lab, or 3-cr lecture + 1-cr lab), only pair sections whose
+  // credits add up to the course total — never 4 + 1 or 3 + 0. Applied only if such a pair exists.
+  const pairTotal = new Map<string, number>();
+  for (const course of new Set(groups.filter((g) => !g.pool).map((g) => g.course))) {
+    const gs = groups.filter((g) => g.course === course);
+    if (gs.length !== 2) continue;
+    const crs = (g: Group) => new Set(g.candidates.map((c) => sections[candidates[c].sections[0]].cr));
+    const a = crs(gs[0]), b = crs(gs[1]);
+    if (a.size === 1 && b.size === 1) continue; // nothing to pair up
+    const total = courseCredits(sections.filter((s) => courseKey(s) === course));
+    if ([...a].some((x) => b.has(total - x))) pairTotal.set(course, total);
+  }
+  const groupCourse = groups.map((g) => g.course);
+
   const compat: Uint32Array[] = [];
   for (let i = 0; i < N; i++) {
     const row = new Uint32Array(W);
     for (let j = 0; j < N; j++) {
       if (candidates[i].group === candidates[j].group) continue;
       if (!filters.mixCampuses && physical(rep[i]) && physical(rep[j]) && rep[i].campus !== rep[j].campus) continue;
+      const ci = groupCourse[candidates[i].group];
+      if (ci === groupCourse[candidates[j].group] && pairTotal.has(ci) && rep[i].cr + rep[j].cr !== pairTotal.get(ci)) continue;
       if (!sectionsConflict(rep[i], rep[j])) row[j >> 5] |= 1 << (j & 31);
     }
     compat.push(row);

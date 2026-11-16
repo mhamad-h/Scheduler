@@ -1,5 +1,6 @@
 import type { Section, TermData, TermInfo } from './types.ts';
 import { courseKey } from './types.ts';
+import { courseCredits } from './credits.ts';
 
 export interface Course {
   key: string; // "MTH 201"
@@ -71,8 +72,7 @@ export function buildIndex(data: TermData): TermIndex {
     c.title = lec.title;
     c.titleLower = [...new Set(c.sections.map((s) => s.title.toLowerCase()))].join(' | ');
     c.types.sort((a, b) => (TYPE_ORDER.indexOf(a) + 99) % 99 - (TYPE_ORDER.indexOf(b) + 99) % 99 || a.localeCompare(b));
-    // credits: sum of the max credits per component type
-    c.credits = c.types.reduce((sum, t) => sum + Math.max(0, ...c!.sections.filter((s) => s.type === t).map((s) => s.cr)), 0);
+    c.credits = courseCredits(c.sections);
   }
   const courses = [...byKey.values()].sort((a, b) => a.subj.localeCompare(b.subj) || a.num.localeCompare(b.num, undefined, { numeric: true }));
   return { data, courses, byKey, byCrn };

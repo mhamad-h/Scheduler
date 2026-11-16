@@ -4,6 +4,7 @@ import type { Section, TermData } from '../data/types.ts';
 import type { CourseConfig, Filters } from './model.ts';
 import { computeFeatures, solve } from './solve.ts';
 import { customWeights, DEFAULT_CUSTOM } from './rank.ts';
+import { courseCredits } from '../data/credits.ts';
 
 const M = 1, T = 2, W = 4, R = 8, F = 16;
 let crn = 10000;
@@ -156,6 +157,34 @@ describe('elective pools (pick N LAS)', () => {
   });
 });
 
+describe('split credits (COE 211: 4+0 or 3+1)', () => {
+  const withCr = (s: Section, cr: number) => ({ ...s, cr });
+  const lec4 = withCr(sec('COE', '211', 'Lecture', M | W, 540, 615), 4);
+  const lec4b = withCr(sec('COE', '211', 'Lecture', T | R, 540, 615), 4);
+  const lec3 = withCr(sec('COE', '211', 'Lecture', M | W, 660, 735), 3);
+  const lab0 = withCr(sec('COE', '211', 'Lab', F, 540, 710), 0);
+  const lab0b = withCr(sec('COE', '211', 'Lab', F, 780, 950), 0);
+  const lab1 = withCr(sec('COE', '211', 'Lab', T, 780, 950), 1);
+  const all = [lec4, lec4b, lec3, lab0, lab0b, lab1];
+
+  it('course credits use the usual split, not max + max', () => {
+    expect(courseCredits(all)).toBe(4);
+  });
+
+  it('only pairs lecture and lab sections whose credits add up to the course total', () => {
+    const r = run(all, [course('COE 211')]);
+    // valid: (lec4 | lec4b) x (lab0 | lab0b) = 4, plus lec3 + lab1 = 1  -> 5 schedules, all 4 credits
+    expect(r.total).toBe(5);
+    for (const s of r.schedules) expect(s.f.credits).toBe(4);
+  });
+
+  it('does not merge equal-time sections with different credits', () => {
+    const a = withCr(sec('COE', '212', 'Lecture', M, 600, 700), 4);
+    const b = { ...withCr(sec('COE', '212', 'Lecture', M, 600, 700), 3), ins: a.ins };
+    expect(run([a, b], [course('COE 212')]).candidates).toHaveLength(2);
+  });
+});
+
 describe('features', () => {
   it('computes gaps, days, lunch and back-to-back', () => {
     const perDay: [number, number][][] = [[[540, 590], [600, 650], [780, 830]], [], [], [], [], [], []];
@@ -189,5 +218,20 @@ describe('real term data', () => {
           for (const a of secs[i].m) for (const b of secs[j].m) expect((a.d & b.d) && a.s < b.e && b.s < a.e).toBeFalsy();
     }
     console.log(`real: ${present.join(', ')} -> ${r.total} schedules, ${r.nodes} nodes, ${r.ms.toFixed(0)}ms`);
+  });
+
+  it('COE 211 always comes out at 4 credits', () => {
+    let data: TermData;
+    try {
+      data = JSON.parse(readFileSync('public/data/202720.json', 'utf8'));
+    } catch {
+      return;
+    }
+    const secs = data.sections.filter((s) => s.subj === 'COE' && s.num === '211');
+    if (!secs.length) return;
+    expect(courseCredits(secs)).toBe(4);
+    const r = run(data.sections, [course('COE 211')]);
+    expect(r.total).toBeGreaterThan(0);
+    for (const s of r.schedules) expect(s.f.credits).toBe(4);
   });
 });
