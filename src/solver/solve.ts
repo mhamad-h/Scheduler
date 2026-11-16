@@ -251,7 +251,7 @@ export function solve(input: SolveInput): SolveResult {
       const why2 = [...why.entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${n} sections removed by ${REASON_TEXT[r]}`);
       const honors = pool.honors === 'honors' ? 'honors ' : pool.honors === 'regular' ? 'regular ' : '';
       return {
-        groups, candidates, schedules: [], rankings: {}, total: 0, nodes: 0, truncated: false, ms: performance.now() - t0, filtered,
+        groups, candidates, schedules: [], rankings: {}, total: 0, nodes: 0, truncated: false, ms: performance.now() - t0, filtered, patterns: {},
         diagnosis: {
           kind: 'empty-group',
           message: `You asked for ${pool.count} ${pool.subj} courses, but only ${usableTopics} ${honors}${pool.subj} topic${usableTopics === 1 ? '' : 's'} pass your filters${why2.length ? ` (${why2.join(', ')})` : ''}.`,
@@ -261,7 +261,7 @@ export function solve(input: SolveInput): SolveResult {
   }
 
   const empty = (diag?: SolveResult['diagnosis']): SolveResult => ({
-    groups, candidates, schedules: [], rankings: {}, total: 0, nodes: 0, truncated: false, ms: performance.now() - t0, diagnosis: diag, filtered,
+    groups, candidates, schedules: [], rankings: {}, total: 0, nodes: 0, truncated: false, ms: performance.now() - t0, diagnosis: diag, filtered, patterns: {},
   });
 
   if (!groups.length) return empty({ kind: 'nothing', message: 'Add some courses to start.' });
@@ -366,6 +366,7 @@ export function solve(input: SolveInput): SolveResult {
   const perDay: [number, number][][] = Array.from({ length: 7 }, () => []);
   let nodes = 0;
   let total = 0;
+  const patterns: Record<number, number> = {};
   let truncated = false;
 
   // pool slots grouped per pool, in slot order
@@ -398,6 +399,7 @@ export function solve(input: SolveInput): SolveResult {
       slots.forEach((g, k) => (poolPick![g] = out[k]));
     }
     total++;
+    patterns[dayMask] = (patterns[dayMask] ?? 0) + 1;
     for (const d of perDay) d.length = 0;
     let credits = 0, preferred = 0, unscheduled = 0;
     const included = new Set<number>();
@@ -508,5 +510,5 @@ export function solve(input: SolveInput): SolveResult {
     };
   }
 
-  return { groups, candidates, schedules, rankings, total, nodes, truncated, ms: performance.now() - t0, diagnosis, filtered };
+  return { groups, candidates, schedules, rankings, total, nodes, truncated, ms: performance.now() - t0, diagnosis, filtered, patterns };
 }

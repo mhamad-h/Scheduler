@@ -3,7 +3,7 @@ import type { TouchEvent as RTouchEvent } from 'react';
 import type { TermIndex } from './data/load.ts';
 import { loadTerm, loadTerms } from './data/load.ts';
 import type { Section, TermInfo } from './data/types.ts';
-import { courseKey } from './data/types.ts';
+import { courseKey, fmtDays } from './data/types.ts';
 import { courseHues, hueFor } from './lib/colors.ts';
 import type { ScheduleView } from './lib/view.ts';
 import { featuresFor, viewFromCrns, viewFromResult } from './lib/view.ts';
@@ -20,7 +20,8 @@ import { CourseSearch } from './components/CourseSearch.tsx';
 import { AddPoolButton, PoolCard } from './components/PoolCard.tsx';
 import { CampusPicker } from './components/CampusPicker.tsx';
 import { FiltersPanel } from './components/FiltersPanel.tsx';
-import { MetricChips } from './components/Metrics.tsx';
+import { dayMaskOf, MetricChips } from './components/Metrics.tsx';
+import { DayPatterns } from './components/DayPatterns.tsx';
 import { PresetBar } from './components/PresetBar.tsx';
 import { CopyCrnsButton, CrnTable, DatedSessions, SwapPanel } from './components/ScheduleDetails.tsx';
 import { SlotsPanel } from './components/SlotsPanel.tsx';
@@ -431,6 +432,7 @@ export function App() {
               </div>
             )
           )}
+          {mode.kind === 'results' && hasWork && result && <DayPatterns patterns={result.patterns ?? {}} daysOff={filters.daysOff} />}
 
           {mode.kind === 'results' && !hasWork && <EmptyState index={index} onAdd={addCourse} />}
           {solveError && <div className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">Solver error: {solveError}</div>}
@@ -461,7 +463,7 @@ export function App() {
                     </div>
                   )}
                   <div className="order-last w-full min-w-0 2xl:order-none 2xl:w-auto 2xl:flex-1">
-                    <MetricChips f={view.f} />
+                    <MetricChips f={view.f} mask={dayMaskOf(view.sections)} />
                   </div>
                   <div className="flex-1 max-sm:hidden 2xl:hidden" />
                   {edited && mode.kind === 'results' && (
@@ -634,10 +636,10 @@ function ResultCard({ rank, active, onClick, result, si, index, hues }: { rank: 
       </div>
       <MiniWeek sections={view.sections} hues={hues} className="mb-2 h-10 w-full sm:h-14" />
       <div className="max-sm:hidden">
-        <MetricChips f={view.f} compact />
+        <MetricChips f={view.f} compact mask={dayMaskOf(view.sections)} />
       </div>
       <div className="truncate text-[11px] tabular-nums text-muted sm:hidden">
-        <b className="text-ink">{view.f.days}</b> days · <b className="text-ink">{Math.round((view.f.gaps / 60) * 10) / 10}h</b> idle
+        <b className="font-mono text-ink">{fmtDays(dayMaskOf(view.sections))}</b> ·<b className="text-ink">{Math.round((view.f.gaps / 60) * 10) / 10}h</b> idle
       </div>
     </button>
   );

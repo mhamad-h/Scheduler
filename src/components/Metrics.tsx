@@ -1,5 +1,6 @@
 import type { Features } from '../solver/model.ts';
-import { DAY_LETTERS, fmtTime } from '../data/types.ts';
+import type { Section } from '../data/types.ts';
+import { DAY_LETTERS, fmtDays, fmtTime } from '../data/types.ts';
 import { cx } from './ui.tsx';
 
 const hrs = (m: number) => (m === 0 ? '0h' : m < 60 ? `${m}m` : `${Math.round((m / 60) * 10) / 10}h`);
@@ -8,9 +9,14 @@ export function dayLetters(mask: number) {
   return DAY_LETTERS.slice(0, 6).map((d, i) => ({ d, on: (mask & (1 << i)) !== 0 }));
 }
 
-export function MetricChips({ f, compact }: { f: Features; compact?: boolean }) {
+/** Weekly day pattern of a set of sections (bitmask, Mon=1). */
+export const dayMaskOf = (sections: Section[]) => sections.reduce((a, s) => s.m.reduce((b, m) => b | m.d, a), 0);
+
+export function MetricChips({ f, compact, mask }: { f: Features; compact?: boolean; mask?: number }) {
   const items: { label: string; value: string; title: string; tone?: 'good' | 'warn' }[] = [
-    { label: 'days', value: String(f.days), title: 'Days on campus', tone: f.days <= 3 ? 'good' : undefined },
+    mask
+      ? { label: `${f.days}d`, value: fmtDays(mask), title: `On campus ${f.days} days a week`, tone: f.days <= 3 ? 'good' : undefined }
+      : { label: 'days', value: String(f.days), title: 'Days on campus', tone: f.days <= 3 ? 'good' : undefined },
     { label: 'idle', value: hrs(f.gaps), title: 'Total idle time between classes per week', tone: f.gaps <= 60 ? 'good' : f.gaps >= 360 ? 'warn' : undefined },
     { label: '', value: f.days ? `${fmtTime(f.start)}–${fmtTime(f.end)}` : '—', title: 'Earliest start – latest end' },
   ];

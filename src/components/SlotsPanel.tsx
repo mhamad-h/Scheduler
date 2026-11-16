@@ -5,7 +5,7 @@ import { joinCrns, useStore, useTermState } from '../state/store.ts';
 import type { Separator } from '../state/store.ts';
 import { viewFromCrns } from '../lib/view.ts';
 import { MiniWeek } from './Calendar.tsx';
-import { MetricChips } from './Metrics.tsx';
+import { dayMaskOf, MetricChips } from './Metrics.tsx';
 import { copyText, cx, Icon, IconButton, Segmented } from './ui.tsx';
 
 export function SlotsPanel({ index, hues, activeSlot, onOpen, onClose }: { index: TermIndex; hues: Record<string, number>; activeSlot: string | null; onOpen: (id: string) => void; onClose: () => void }) {
@@ -99,7 +99,7 @@ export function SlotsPanel({ index, hues, activeSlot, onOpen, onClose }: { index
                       {editing !== slot.id && <IconButton icon="edit" label="Rename" className="size-6" onClick={() => setEditing(slot.id)} />}
                     </div>
                     <div className="mb-1.5 truncate text-xs text-muted">{courses.join(' · ') || 'Empty'}</div>
-                    <MetricChips f={view.f} compact />
+                    <MetricChips f={view.f} compact mask={dayMaskOf(view.sections)} />
                   </div>
                 </div>
                 <div className="mt-2.5 flex items-center gap-1 border-t border-line pt-2">

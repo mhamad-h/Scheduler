@@ -185,6 +185,30 @@ describe('split credits (COE 211: 4+0 or 3+1)', () => {
   });
 });
 
+describe('ranking prefers fewer campus days', () => {
+  // Three courses, each offered MWF or TR. All-MWF has a 2h10 gap per day; mixing in TR removes
+  // gaps but puts you on campus 5 days. Every preset except the specialised ones must pick MWF.
+  const a1 = sec('AAA', '101', 'Lecture', M | W | F, 480, 530);
+  const a2 = sec('AAA', '101', 'Lecture', T | R, 540, 615);
+  const b1 = sec('BBB', '101', 'Lecture', M | W | F, 540, 590);
+  const b2 = sec('BBB', '101', 'Lecture', T | R, 630, 705);
+  const c1 = sec('CCC', '101', 'Lecture', M | W | F, 720, 770); // 12:00 — leaves a 2h10 gap after BBB
+  const c2 = sec('CCC', '101', 'Lecture', T | R, 630, 705); // clashes with BBB's TR section, so no TR-only schedule
+  const r = run([a1, a2, b1, b2, c1, c2], [course('AAA 101'), course('BBB 101'), course('CCC 101')]);
+  const topDays = (id: string) => r.schedules[r.rankings[id][0]].f.days;
+
+  it('Balanced, Fewest days, Consistent, Custom and Preferred profs pick the 3-day MWF schedule', () => {
+    for (const id of ['balanced', 'fewest-days', 'consistent', 'custom', 'professors']) expect(topDays(id), id).toBe(3);
+  });
+
+  it('reports how many schedules use each day pattern', () => {
+    expect(r.patterns[M | W | F]).toBe(1);
+    expect(r.patterns[T | R]).toBeUndefined();
+    expect(r.patterns[M | T | W | R | F]).toBeGreaterThan(0);
+    expect(Object.values(r.patterns).reduce((a, b) => a + b, 0)).toBe(r.total);
+  });
+});
+
 describe('features', () => {
   it('computes gaps, days, lunch and back-to-back', () => {
     const perDay: [number, number][][] = [[[540, 590], [600, 650], [780, 830]], [], [], [], [], [], []];

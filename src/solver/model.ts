@@ -130,6 +130,8 @@ export interface SolveResult {
   truncated: boolean;
   ms: number;
   diagnosis?: Diagnosis;
+  /** how many valid schedules use each weekly day pattern (dayMask -> count) */
+  patterns: Record<number, number>;
   /** per group: how many sections were removed by filters */
   filtered: { group: number; before: number; after: number }[];
 }
