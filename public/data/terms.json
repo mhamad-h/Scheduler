@@ -1,0 +1,26 @@
+{
+ "generatedAt": "2026-11-16T22:33:09.143Z",
+ "terms": [
+  {
+   "code": "202720",
+   "name": "Spring 2027",
+   "updatedAt": "2026-11-16T22:32:51.233Z",
+   "sections": 2280,
+   "courses": 883
+  },
+  {
+   "code": "202710",
+   "name": "Fall 2026",
+   "updatedAt": "2026-11-16T22:33:05.851Z",
+   "sections": 2615,
+   "courses": 977
+  },
+  {
+   "code": "202630",
+   "name": "Summer 2026",
+   "updatedAt": "2026-11-16T22:33:09.142Z",
+   "sections": 406,
+   "courses": 244
+  }
+ ]
+}
