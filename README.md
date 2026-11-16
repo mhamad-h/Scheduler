@@ -1,5 +1,7 @@
 # LAU Scheduler
 
+**Live site: https://mhamad-h.github.io/Scheduler/**
+
 A fast, good-looking class scheduler for Lebanese American University. Add the courses you need, set filters, and it finds every conflict-free combination of sections and ranks them. Save the best ones in slots and copy their CRNs straight into Banner.
 
 ## Features
