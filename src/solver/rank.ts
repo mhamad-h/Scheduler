@@ -23,7 +23,10 @@ export const PRESETS: Preset[] = [
     id: 'balanced',
     label: 'Balanced',
     hint: 'Fewest days first, then short gaps, steady times, sensible hours and a lunch break',
-    weights: { ...BASE, days: DAY, gaps: 0.5, spread: 0.5, earliness: 0.4, lateness: 0.3, noLunch: 30, b2b: 5, preferred: -60 },
+    // A campus day weighs 600 (~10 hours): Balanced only adds a day when the fewer-day option is
+    // genuinely bad (e.g. 20 hours of weekly gaps). Among schedules with the same number of days,
+    // the other terms pick the nicest one.
+    weights: { ...BASE, days: 600, gaps: 0.5, spread: 0.5, earliness: 0.4, lateness: 0.3, noLunch: 30, b2b: 5, preferred: -60 },
   },
   {
     id: 'fewest-days',
