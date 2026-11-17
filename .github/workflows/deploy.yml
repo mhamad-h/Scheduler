@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
   schedule:
-    # every 6 hours (UTC); during registration you can run it by hand from the Actions tab
-    - cron: '17 */6 * * *'
+    # every 12 hours: 00:17 and 12:17 UTC (3:17 am/pm Beirut time in winter). Run it by hand from
+    # Actions > Refresh data & deploy > Run workflow whenever you want fresh data sooner.
+    - cron: '17 */12 * * *'
   workflow_dispatch:
 
 permissions:
@@ -32,18 +33,20 @@ jobs:
 
       - run: npm ci
 
+      # Every run fetches fresh data from Banner. On scheduled / manual runs a failed fetch fails the
+      # whole run (red ✗ + email) so a broken refresh can't go unnoticed; on code pushes it doesn't
+      # block the deploy — the site just keeps the last good data.
       - name: Scrape LAU Banner
-        if: github.event_name != 'push'
-        # if Banner is down, keep deploying the last good data
-        continue-on-error: true
+        continue-on-error: ${{ github.event_name == 'push' }}
         run: npm run scrape
 
       - name: Commit refreshed data
-        if: github.event_name != 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/data
+          # terms.json always records the check time; that small change also keeps the repo
+          # "active" so GitHub never pauses this schedule
           if git diff --cached --quiet; then
             echo "No data changes"
           else

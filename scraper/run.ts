@@ -33,6 +33,7 @@ async function main() {
 
   await mkdir(outDir, { recursive: true });
   const infos: TermInfo[] = [];
+  let fresh = 0; // terms refreshed successfully this run
   const limit = pLimit(4);
 
   for (const term of terms) {
@@ -78,14 +79,33 @@ async function main() {
       continue;
     }
 
-    const updatedAt = new Date().toISOString();
-    const data: TermData = { term: term.code, name: term.name, updatedAt, sections };
-    await writeFile(file, JSON.stringify(data));
+    // Only rewrite the term file when Banner's data actually changed, so the repo doesn't grow by a
+    // full copy of every term on each run. `updatedAt` = when the sections last changed.
+    let updatedAt = new Date().toISOString();
+    let changed = true;
+    try {
+      const prev = JSON.parse(await readFile(file, 'utf8')) as TermData;
+      if (prev.name === term.name && JSON.stringify(prev.sections) === JSON.stringify(sections)) {
+        updatedAt = prev.updatedAt;
+        changed = false;
+      }
+    } catch {
+      /* new term */
+    }
+    if (changed) await writeFile(file, JSON.stringify({ term: term.code, name: term.name, updatedAt, sections } satisfies TermData));
+    fresh++;
     const courses = new Set(sections.map(courseKey)).size;
     infos.push({ code: term.code, name: term.name, updatedAt, sections: sections.length, courses });
-    console.log(`✓ ${term.name} (${term.code}): ${sections.length} sections, ${courses} courses, ${subjects.length} subjects in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    console.log(
+      `✓ ${term.name} (${term.code}): ${sections.length} sections, ${courses} courses, ${subjects.length} subjects in ${((Date.now() - t0) / 1000).toFixed(1)}s — ${changed ? 'CHANGED' : 'unchanged'}`,
+    );
   }
 
+  // Fail the run (so GitHub shows a red ✗ and emails the owner) if no term could be refreshed,
+  // without touching terms.json — the site keeps showing the last good data and check time.
+  if (fresh === 0) throw new Error(`Could not refresh any term from Banner (${terms.length} tried)`);
+
+  // generatedAt = when Banner was last checked successfully
   await writeFile(join(outDir, 'terms.json'), JSON.stringify({ generatedAt: new Date().toISOString(), terms: infos }, null, 1));
 }
 

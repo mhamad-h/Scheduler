@@ -30,6 +30,8 @@ interface State {
   custom: Record<string, number>;
   separator: Separator;
   crnSort: CrnSort;
+  /** newest term whose "new semester is out" notice the user closed */
+  dismissedTerm: string | null;
 
   setTheme(t: Theme): void;
   setTerm(t: string): void;
@@ -45,6 +47,7 @@ interface State {
   setCustom(key: string, v: number): void;
   setSeparator(s: Separator): void;
   setCrnSort(s: CrnSort): void;
+  dismissTerm(code: string): void;
   addPool(subj: string, count?: number): void;
   updatePool(id: string, patch: Partial<PoolConfig>): void;
   removePool(id: string): void;
@@ -93,9 +96,11 @@ export const useStore = create<State>()(
         custom: DEFAULT_CUSTOM,
         separator: 'space',
         crnSort: 'course',
+        dismissedTerm: null,
 
         setTheme: (theme) => set({ theme }),
         setTerm: (term) => set({ term }),
+        dismissTerm: (dismissedTerm) => set({ dismissedTerm }),
         addCourse: (key) =>
           patchTerm((t) =>
             t.courses.some((c) => c.key === key)
@@ -164,7 +169,7 @@ export const useStore = create<State>()(
     {
       name: 'lau-scheduler',
       version: 1,
-      partialize: (s) => ({ theme: s.theme, term: s.term, terms: s.terms, filters: s.filters, preset: s.preset, custom: s.custom, separator: s.separator, crnSort: s.crnSort }),
+      partialize: (s) => ({ theme: s.theme, term: s.term, terms: s.terms, filters: s.filters, preset: s.preset, custom: s.custom, separator: s.separator, crnSort: s.crnSort, dismissedTerm: s.dismissedTerm }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
         const terms: Record<string, TermState> = {};

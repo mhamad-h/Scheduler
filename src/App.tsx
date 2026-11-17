@@ -47,6 +47,9 @@ export function App() {
   const hasWork = courseConfigs.length > 0 || pools.length > 0;
 
   const [terms, setTerms] = useState<TermInfo[] | null>(null);
+  // when the scraper last checked Banner (data files only change when Banner's data does)
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const dismissedTerm = useStore((s) => s.dismissedTerm);
   const [index, setIndex] = useState<TermIndex | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: 'results' });
@@ -79,8 +82,9 @@ export function App() {
   // ---- data
   useEffect(() => {
     loadTerms()
-      .then(({ terms }) => {
+      .then(({ terms, generatedAt }) => {
         setTerms(terms);
+        setCheckedAt(generatedAt ?? null);
         const share = parseShare();
         const cur = useStore.getState().term;
         if (share && terms.some((t) => t.code === share.term)) {
@@ -107,6 +111,9 @@ export function App() {
   }, [terms, setTerm]);
 
   const termInfo = terms?.find((t) => t.code === term);
+  // a newer semester than the one this visitor is looking at (e.g. Fall 2027 came out while they're on Spring 2027)
+  const newest = terms?.[0];
+  const newTerm = newest && term && Number(newest.code) > Number(term) && dismissedTerm !== newest.code ? newest : null;
   useEffect(() => {
     if (!termInfo) return;
     setIndex(null);
@@ -319,7 +326,22 @@ export function App() {
 
   return (
     <div className="min-h-screen">
-      <Header theme={theme} terms={terms} term={term} termInfo={termInfo} slotCount={slots.length} onSlots={() => setSlotsOpen(true)} />
+      <Header theme={theme} terms={terms} term={term} termInfo={termInfo} checkedAt={checkedAt} slotCount={slots.length} onSlots={() => setSlotsOpen(true)} />
+
+      {newTerm && (
+        <div className="mx-auto max-w-[1500px] px-4 pt-4">
+          <div className="animate-pop flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-accent/30 bg-accent-soft px-4 py-2.5 text-sm text-accent-text">
+            <Icon name="sparkle" />
+            <span className="min-w-0 flex-1">
+              <b>{newTerm.name}</b> is out on Banner — {newTerm.courses.toLocaleString()} courses. You're viewing {termInfo?.name}.
+            </span>
+            <Button size="sm" variant="primary" onClick={() => setTerm(newTerm.code)}>
+              Switch to {newTerm.name}
+            </Button>
+            <IconButton icon="x" label="Dismiss" onClick={() => useStore.getState().dismissTerm(newTerm.code)} />
+          </div>
+        </div>
+      )}
 
       {loadError && (
         <div className="mx-auto max-w-[1500px] px-4 pt-4">
@@ -544,7 +566,7 @@ export function App() {
           mobileTab === 'schedules' && view ? 'pb-24 max-sm:pb-40' : 'pb-24',
         )}
       >
-        Unofficial tool. Course data is copied from LAU Banner's public class schedule{termInfo && <> and was last refreshed {timeAgo(termInfo.updatedAt)}</>}. Always confirm on Banner before registering.
+        Unofficial tool. Course data is copied from LAU Banner's public class schedule{checkedAt && <> and was last checked {timeAgo(checkedAt)}</>}. Always confirm on Banner before registering.
       </footer>
 
       {slotsOpen && index && (
@@ -645,7 +667,7 @@ function ResultCard({ rank, active, onClick, result, si, index, hues }: { rank: 
   );
 }
 
-function Header({ theme, terms, term, termInfo, slotCount, onSlots }: { theme: Theme; terms: TermInfo[] | null; term: string | null; termInfo?: TermInfo; slotCount: number; onSlots: () => void }) {
+function Header({ theme, terms, term, termInfo, checkedAt, slotCount, onSlots }: { theme: Theme; terms: TermInfo[] | null; term: string | null; termInfo?: TermInfo; checkedAt: string | null; slotCount: number; onSlots: () => void }) {
   const { setTheme, setTerm } = useStore.getState();
   const next: Record<Theme, Theme> = { system: 'light', light: 'dark', dark: 'system' };
   return (
@@ -676,9 +698,12 @@ function Header({ theme, terms, term, termInfo, slotCount, onSlots }: { theme: T
           </select>
         )}
         {termInfo && (
-          <span className="hidden items-center gap-1.5 text-xs text-muted md:inline-flex" title={`Data refreshed ${new Date(termInfo.updatedAt).toLocaleString()}`}>
+          <span
+            className="hidden items-center gap-1.5 text-xs text-muted md:inline-flex"
+            title={`Banner checked ${new Date(checkedAt ?? termInfo.updatedAt).toLocaleString()}\n${termInfo.name} sections last changed ${new Date(termInfo.updatedAt).toLocaleString()}`}
+          >
             <span className="size-1.5 rounded-full bg-accent" />
-            Updated {timeAgo(termInfo.updatedAt)}
+            Checked {timeAgo(checkedAt ?? termInfo.updatedAt)}
           </span>
         )}
         <Button onClick={onSlots} variant="outline" className="max-lg:hidden">
