@@ -20,6 +20,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.built.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +55,10 @@ jobs:
 
       - run: npm run build
 
+      # the commit this site was built from (after any data commit above)
+      - id: built
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -64,5 +70,15 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # "Re-run jobs" on an old run would republish that old build and roll the site back.
+      # Only deploy if this build is still the latest commit on main.
+      - name: Refuse to deploy an outdated build
+        run: |
+          head=$(git ls-remote "https://github.com/${{ github.repository }}.git" refs/heads/main | cut -f1)
+          if [ "$head" != "${{ needs.build.outputs.sha }}" ]; then
+            echo "::error::This run built ${{ needs.build.outputs.sha }}, but main is now at $head. Deploying it would roll the site back. To refresh, use Actions > Refresh data & deploy > Run workflow instead of re-running an old run."
+            exit 1
+          fi
+
       - id: deployment
         uses: actions/deploy-pages@v4
