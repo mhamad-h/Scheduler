@@ -234,9 +234,11 @@ export function App() {
     copyText(url, 'Share link copied');
   };
 
-  const swap = (from: Section, to: Section) => {
-    if (!view || !index) return;
-    const sections = view.sections.map((s) => (s.crn === from.crn ? to : s));
+  const swap = (changes: [Section, Section][]) => {
+    if (!view || !index || !changes.length) return;
+    const to = changes[0][1];
+    const sections = view.sections.map((s) => changes.find(([from]) => from.crn === s.crn)?.[1] ?? s);
+    if (changes.length > 1) toast(`Swapped ${changes.map(([, t]) => `${courseKey(t)}${t.type !== 'Lecture' ? ' ' + t.type.toLowerCase() : ''}`).join(' and ')}`);
     if (mode.kind === 'slot' && activeSlot) {
       setSlotCrns(activeSlot.id, sections.map((s) => s.crn));
       toast(`${activeSlot.name} updated`);

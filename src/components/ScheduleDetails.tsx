@@ -3,7 +3,7 @@ import type { TermIndex } from '../data/load.ts';
 import type { Section } from '../data/types.ts';
 import { courseKey, fmtDays, fmtTime } from '../data/types.ts';
 import type { ScheduleView } from '../lib/view.ts';
-import { conflictsWith, datedSessions } from '../lib/view.ts';
+import { conflictsWith, creditMismatch, datedSessions, findTrade } from '../lib/view.ts';
 import { joinCrns, useStore } from '../state/store.ts';
 import type { CrnSort } from '../state/store.ts';
 import { copyText, cx, Icon, Segmented } from './ui.tsx';
@@ -226,7 +226,8 @@ export function SwapPanel({
   hues: Record<string, number>;
   /** auto-picked electives: every allowed course of the pool instead of just this course's sections */
   options?: Section[];
-  onSwap: (from: Section, to: Section) => void;
+  /** one or more [from, to] replacements applied together */
+  onSwap: (changes: [Section, Section][]) => void;
   onClose: () => void;
 }) {
   const filters = useStore((s) => s.filters);
@@ -238,13 +239,30 @@ export function SwapPanel({
   const isPool = !!poolOptions;
   const options = (poolOptions ?? course?.sections ?? [])
     .filter((s) => s.type === selected.type && s.crn !== selected.crn)
-    .map((s) => ({
-      s,
-      clash: conflictsWith(s, others),
-      avoided: s.ins.some((n) => filters.profs[n] === 'avoid'),
-      otherCampus: !filters.mixCampuses && !!homeCampus && physical(s.campus) && s.campus !== homeCampus,
-    }))
-    .sort((a, b) => Number(!!a.clash) - Number(!!b.clash) || Number(a.otherCampus) - Number(b.otherCampus) || (a.s.m[0]?.s ?? 0) - (b.s.m[0]?.s ?? 0));
+    .map((s) => {
+      const clash = conflictsWith(s, others);
+      const mismatch = creditMismatch(s, others, index);
+      // blocked by one other class? offer to move that class too (ideally into this one's old slot)
+      const otherCampus = !filters.mixCampuses && !!homeCampus && physical(s.campus) && s.campus !== homeCampus;
+      const trade = (clash || mismatch) && !otherCampus ? findTrade(selected, s, view.sections, index, { profs: filters.profs, mixCampuses: filters.mixCampuses }) : null;
+      return {
+        s,
+        clash,
+        mismatch,
+        trade,
+        blocked: (!!clash || !!mismatch) && !trade,
+        avoided: s.ins.some((n) => filters.profs[n] === 'avoid'),
+        otherCampus,
+      };
+    })
+    .sort(
+      (a, b) =>
+        Number(a.blocked) - Number(b.blocked) ||
+        Number(!!a.trade) - Number(!!b.trade) ||
+        Number(a.otherCampus) - Number(b.otherCampus) ||
+        (a.s.m[0]?.s ?? 0) - (b.s.m[0]?.s ?? 0),
+    );
+  const when = (s: Section) => s.m.map((m) => `${fmtDays(m.d)} ${fmtTime(m.s)}`).join(', ') || 'no set time';
 
   return (
     <div className="animate-pop rounded-xl border border-line bg-surface p-3" style={{ ['--h' as string]: hues[key] ?? 210 }}>
@@ -267,12 +285,13 @@ export function SwapPanel({
       </div>
       {options.length === 0 && <p className="text-xs text-muted">No other sections of this {selected.type.toLowerCase()}.</p>}
       <div className="scrollbar-thin max-h-56 space-y-1 overflow-y-auto">
-        {options.map(({ s, clash, avoided, otherCampus }) => (
+        {options.map(({ s, clash, mismatch, trade, blocked, avoided, otherCampus }) => (
           <button
             key={s.crn}
-            disabled={!!clash}
-            onClick={() => onSwap(selected, s)}
-            className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={blocked}
+            onClick={() => onSwap(trade ? [[selected, s], [trade.from, trade.to]] : [[selected, s]])}
+            title={trade ? `Also moves ${courseKey(trade.from)}${trade.from.type !== 'Lecture' ? ' ' + trade.from.type.toLowerCase() : ''} to section ${trade.to.sec} (${when(trade.to)}, CRN ${trade.to.crn})` : undefined}
+            className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPool ? (
               <span className="w-[64px] shrink-0">
@@ -282,15 +301,28 @@ export function SwapPanel({
             ) : (
               <span className="w-8 font-mono text-muted">{s.sec}</span>
             )}
-            <span className="min-w-0 flex-1">
-              {isPool && <span className="block truncate font-medium">{s.title}</span>}
+            <span className="min-w-0 flex-1 max-sm:min-w-[160px]">
+              {isPool &&<span className="block truncate font-medium">{s.title}</span>}
               {s.m.length ? s.m.map((m, i) => <span key={i} className="mr-2 whitespace-nowrap"><b className="font-medium">{fmtDays(m.d)}</b> {fmtTime(m.s)}–{fmtTime(m.e)}</span>) : <i>No set time</i>}
               <span className={cx('block', avoided ? 'text-danger' : 'text-muted')}>
                 {s.ins.join(', ') || 'TBA'} · {s.campus}
               </span>
             </span>
-            {clash ? (
+            {trade ? (
+              <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-right text-[10px] leading-tight text-accent-text max-sm:ml-11 max-sm:text-left">
+                <span className="flex items-center gap-1 font-medium sm:justify-end">
+                  <Icon name="swap" className="size-3" />
+                  {trade.exact ? 'Trade times' : 'Also move'} with {courseKey(trade.from)}
+                  {trade.from.type !== 'Lecture' && ' ' + trade.from.type.toLowerCase()}
+                </span>
+                <span className="block opacity-80">→ {when(trade.to)}</span>
+              </span>
+            ) : clash ? (
               <span className="text-[10px] text-danger">clashes with {courseKey(clash)}</span>
+            ) : mismatch ? (
+              <span className="text-[10px] text-danger" title={`${courseKey(s)}'s lecture and lab credits must add up to the course total`}>
+                credits don't pair with your {mismatch.type.toLowerCase()}
+              </span>
             ) : otherCampus ? (
               <span className="text-[10px] text-warn" title={`Your other classes are in ${homeCampus}`}>
                 {s.campus} campus · <span className="font-mono">{s.crn}</span>

@@ -178,6 +178,17 @@ describe('split credits (COE 211: 4+0 or 3+1)', () => {
     for (const s of r.schedules) expect(s.f.credits).toBe(4);
   });
 
+  it('locks and exclusions never let a mismatched pair through', () => {
+    // a locked 4-cr lecture + a locked 1-cr lab is still invalid (5 credits)
+    const both = run(all, [course('COE 211', { lockedCrns: [lec4.crn, lab1.crn] })]);
+    expect(both.total).toBe(0);
+    expect(both.diagnosis?.message).toMatch(/must add up to 4/);
+    // excluding every 0-cr lab leaves the 4-cr lectures without a partner
+    const noLab0 = run(all, [course('COE 211', { excludedCrns: [lab0.crn, lab0b.crn] })]);
+    expect(noLab0.total).toBe(1);
+    for (const s of noLab0.schedules) expect(s.f.credits).toBe(4);
+  });
+
   it('does not merge equal-time sections with different credits', () => {
     const a = withCr(sec('COE', '212', 'Lecture', M, 600, 700), 4);
     const b = { ...withCr(sec('COE', '212', 'Lecture', M, 600, 700), 3), ins: a.ins };

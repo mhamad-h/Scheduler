@@ -286,15 +286,18 @@ export function solve(input: SolveInput): SolveResult {
 
   // Credit pairing: when a course's credits are split between its two components in more than one
   // way (COE 211: 4-cr lecture + 0-cr lab, or 3-cr lecture + 1-cr lab), only pair sections whose
-  // credits add up to the course total — never 4 + 1 or 3 + 0. Applied only if such a pair exists.
+  // credits add up to the course total — never 4 + 1 or 3 + 0. Decided from *all* of the course's
+  // sections, not just those left after filters/locks: narrowing the choice must never make an
+  // invalid pair (e.g. a locked 4-cr lecture + a locked 1-cr lab) acceptable.
   const pairTotal = new Map<string, number>();
   for (const course of new Set(groups.filter((g) => !g.pool).map((g) => g.course))) {
     const gs = groups.filter((g) => g.course === course);
     if (gs.length !== 2) continue;
-    const crs = (g: Group) => new Set(g.candidates.map((c) => sections[candidates[c].sections[0]].cr));
+    const all = sections.filter((s) => courseKey(s) === course);
+    const crs = (g: Group) => new Set(all.filter((s) => s.type === g.type).map((s) => s.cr));
     const a = crs(gs[0]), b = crs(gs[1]);
-    if (a.size === 1 && b.size === 1) continue; // nothing to pair up
-    const total = courseCredits(sections.filter((s) => courseKey(s) === course));
+    if (a.size === 1 && b.size === 1) continue; // only one way to split the credits
+    const total = courseCredits(all);
     if ([...a].some((x) => b.has(total - x))) pairTotal.set(course, total);
   }
   const groupCourse = groups.map((g) => g.course);
@@ -337,6 +340,16 @@ export function solve(input: SolveInput): SolveResult {
         if (ok) break;
       }
       if (!ok) {
+        if (ga.course === gb.course && pairTotal.has(ga.course)) {
+          const total = pairTotal.get(ga.course)!;
+          const crOf = (g: Group) => [...new Set(sections.filter((s) => courseKey(s) === g.course && s.type === g.type).map((s) => s.cr))].sort((x, y) => y - x);
+          const splits = crOf(ga).filter((x) => crOf(gb).includes(total - x)).map((x) => `${x}-cr ${ga.type.toLowerCase()} + ${total - x}-cr ${gb.type.toLowerCase()}`);
+          const ab = [ga, gb].some((g) => filtered[groups.indexOf(g)].after < filtered[groups.indexOf(g)].before);
+          return empty({
+            kind: 'pair-conflict',
+            message: `${ga.course} is ${total} credits, so its ${ga.type.toLowerCase()} and ${gb.type.toLowerCase()} must add up to ${total} (${splits.join(', or ')}). ${ab ? 'The sections left after your locks and filters' : 'Its sections'} can't be paired that way without a clash — unlock or include another ${gb.type.toLowerCase()}.`,
+          });
+        }
         const name = (g: Group) =>
           g.pool ? `any ${g.pool.subj} course` : `${g.course}${groups.filter((x) => x.course === g.course).length > 1 ? ' ' + g.type : ''}`;
         return empty({ kind: 'pair-conflict', message: `Every available section of ${name(ga)} clashes with every available section of ${name(gb)}.` });
