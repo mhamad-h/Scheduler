@@ -6,7 +6,8 @@ import type { Section, TermInfo } from './data/types.ts';
 import { courseKey, fmtDays } from './data/types.ts';
 import { courseHues, hueFor } from './lib/colors.ts';
 import type { ScheduleView } from './lib/view.ts';
-import { featuresFor, viewFromCrns, viewFromResult } from './lib/view.ts';
+import { alternatesFor, featuresFor, viewFromCrns, viewFromResult } from './lib/view.ts';
+import { timeAgo } from './lib/time.ts';
 import type { SolveInput } from './solver/model.ts';
 import { CUSTOM_ID, customWeights, PRESETS } from './solver/rank.ts';
 import { useSolver } from './solver/useSolver.ts';
@@ -245,7 +246,7 @@ export function App() {
     } else if (mode.kind === 'shared') {
       setMode({ kind: 'shared', crns: sections.map((s) => s.crn) });
     } else {
-      setEdited({ sections, alternates: {}, f: featuresFor(sections, filters.profs), missing: [] });
+      setEdited({ sections, alternates: alternatesFor(sections, index), f: featuresFor(sections, filters.profs), missing: [] });
     }
     setSelected(to);
   };
@@ -456,7 +457,7 @@ export function App() {
               </div>
             )
           )}
-          {mode.kind === 'results' && hasWork && result && <DayPatterns patterns={result.patterns ?? {}} daysOff={filters.daysOff} />}
+          {mode.kind === 'results' && hasWork && result && <DayPatterns patterns={result.patterns ?? {}} dayPattern={filters.dayPattern ?? 0} />}
 
           {mode.kind === 'results' && !hasWork && <EmptyState index={index} onAdd={addCourse} />}
           {solveError && <div className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">Solver error: {solveError}</div>}
@@ -508,7 +509,13 @@ export function App() {
                 </div>
 
                 <div onTouchStart={swipe.start} onTouchEnd={swipe.end}>
-                  <Calendar sections={view.sections} hues={viewHues} blocked={filters.blocked} selected={selected?.crn} onSelect={(s) => setSelected((cur) => (cur?.crn === s.crn ? null : s))} />
+                  <Calendar sections={view.sections} hues={viewHues} blocked={filters.blocked} selected={selected?.crn} onSelect={(s) => {
+                    const opening = selected?.crn !== s.crn;
+                    setSelected(opening ? s : null);
+                    // phones: the class's details open below the calendar, so bring them into view
+                    if (opening && window.innerWidth < 640)
+                      requestAnimationFrame(() => document.getElementById('class-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                  }} />
                 </div>
 
                 {selected && index && (
@@ -518,7 +525,7 @@ export function App() {
                 )}
 
                 <div className="mt-5">
-                  <CrnTable view={view} hues={viewHues} order={takenKeys} selected={selected?.crn ?? null} onSelect={setSelected} />
+                  <CrnTable view={view} hues={viewHues} seatsAt={termInfo?.seatsAt} order={takenKeys} selected={selected?.crn ?? null} onSelect={setSelected} />
                 </div>
                 <div className="mt-5">
                   <DatedSessions view={view} hues={viewHues} />
@@ -765,10 +772,3 @@ function EmptyState({ index, onAdd }: { index: TermIndex | null; onAdd: (k: stri
   );
 }
 
-function timeAgo(iso: string) {
-  const s = (Date.now() - +new Date(iso)) / 1000;
-  if (s < 90) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400 * 2) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} days ago`;
-}

@@ -172,3 +172,30 @@ export function parseSections(html: string): Section[] {
 
   return out;
 }
+
+export interface Seats {
+  /** capacity, registered ("Actual"), remaining */
+  seats: [number, number, number];
+  waitlist?: [number, number, number];
+}
+
+/**
+ * Seat numbers from a section's "Detailed Class Information" page (bwckschd.p_disp_detail_sched).
+ * Returns null when the page has no seating table (wrong page, error page, or anything unexpected).
+ */
+export function parseSeats(html: string): Seats | null {
+  const $ = cheerio.load(html);
+  const table = $('table.datadisplaytable')
+    .filter((_, t) => /seating numbers/i.test($(t).attr('summary') ?? '') || /Registration Availability/i.test($(t).find('caption').text()))
+    .first();
+  if (!table.length) return null;
+  const row = (label: RegExp): [number, number, number] | undefined => {
+    const tr = table.find('tr').filter((_, r) => label.test($(r).find('th').first().text().trim())).first();
+    const nums = tr.find('td').map((_, td) => Number($(td).text().trim())).get() as number[];
+    return nums.length === 3 && nums.every(Number.isFinite) ? [nums[0], nums[1], nums[2]] : undefined;
+  };
+  const seats = row(/^Seats$/i);
+  if (!seats) return null;
+  const waitlist = row(/^Waitlist Seats$/i);
+  return waitlist && waitlist[0] > 0 ? { seats, waitlist } : { seats };
+}

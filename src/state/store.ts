@@ -64,9 +64,11 @@ export const DEFAULT_FILTERS: Filters = {
   latest: null,
   daysOff: 0,
   maxDays: 0,
+  dayPattern: 0,
   blocked: [],
   profs: {},
   hideUnscheduled: false,
+  hideFull: false,
   mixCampuses: false,
 };
 

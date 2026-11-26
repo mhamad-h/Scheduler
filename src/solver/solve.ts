@@ -1,9 +1,10 @@
 import type { Meeting, Section } from '../data/types.ts';
-import { courseKey, DAY_NAMES, fmtTime } from '../data/types.ts';
+import { courseKey, DAY_NAMES, fmtDays, fmtTime } from '../data/types.ts';
 import type { Candidate, Features, Filters, Group, Schedule, SolveInput, SolveResult, Weights } from './model.ts';
 import { cost, CUSTOM_ID, PRESETS } from './rank.ts';
 import { poolCourses } from './pool.ts';
 import { courseCredits } from '../data/credits.ts';
+import { seatRank } from '../lib/seats.ts';
 
 const popcount = (n: number) => {
   n = n - ((n >> 1) & 0x55555555);
@@ -18,12 +19,13 @@ export function sectionsConflict(a: Section, b: Section): boolean {
   return false;
 }
 
-type Reason = 'excluded' | 'locked' | 'campus' | 'professor' | 'time' | 'days' | 'blocked' | 'unscheduled';
+type Reason = 'excluded' | 'locked' | 'campus' | 'professor' | 'time' | 'days' | 'blocked' | 'unscheduled' | 'full';
 
 function rejectReason(s: Section, f: Filters): Reason | null {
   if (f.campuses.length && !f.campuses.includes(s.campus)) return 'campus';
   if (s.ins.some((n) => f.profs[n] === 'avoid')) return 'professor';
   if (!s.m.length && f.hideUnscheduled) return 'unscheduled';
+  if (f.hideFull && s.seats && s.seats[2] <= 0) return 'full';
   for (const m of s.m) {
     if (m.d & f.daysOff) return 'days';
     if (f.earliest !== null && m.s < f.earliest) return 'time';
@@ -42,6 +44,7 @@ const REASON_TEXT: Record<Reason, string> = {
   days: 'days off',
   blocked: 'blocked times',
   unscheduled: 'they have no fixed time',
+  full: 'they are full or closed',
 };
 
 /** Max-heap of the K lowest-cost entries. */
@@ -185,6 +188,8 @@ export function solve(input: SolveInput): SolveResult {
       }
       const cands: number[] = [];
       for (const list of byKey.values()) {
+        // equivalent sections: put the one with the most seats left first
+        list.sort((a, b) => seatRank(sections[b]) - seatRank(sections[a]));
         const id = candidates.length;
         candidates.push({ id, group: g, sections: list, crns: list.map((i) => sections[i].crn) });
         cands.push(id);
@@ -411,8 +416,11 @@ export function solve(input: SolveInput): SolveResult {
       poolPick ??= {};
       slots.forEach((g, k) => (poolPick![g] = out[k]));
     }
-    total++;
+    // patterns count every valid schedule (so all day-pattern choices stay visible), then the
+    // exact-days filter keeps only the chosen pattern
     patterns[dayMask] = (patterns[dayMask] ?? 0) + 1;
+    if (dayPattern && dayMask !== dayPattern) return;
+    total++;
     for (const d of perDay) d.length = 0;
     let credits = 0, preferred = 0, unscheduled = 0;
     const included = new Set<number>();
@@ -440,6 +448,7 @@ export function solve(input: SolveInput): SolveResult {
   };
 
   const maxDays = filters.maxDays || 7;
+  const dayPattern = filters.dayPattern || 0;
 
   const rec = (depth: number, dayMask: number) => {
     if (++nodes > maxNodes) {
@@ -511,7 +520,13 @@ export function solve(input: SolveInput): SolveResult {
   });
 
   let diagnosis: SolveResult['diagnosis'];
-  if (!total) {
+  const allValid = Object.values(patterns).reduce((a, n) => a + n, 0);
+  if (!total && dayPattern && allValid) {
+    diagnosis = {
+      kind: 'no-fit',
+      message: `None of the ${allValid.toLocaleString()} schedules meet on exactly ${fmtDays(dayPattern)}. Pick another day pattern above, or "Any days".`,
+    };
+  } else if (!total) {
     const limits: string[] = [];
     if (filters.maxDays) limits.push(`max ${filters.maxDays} days`);
     if (filters.daysOff) limits.push(`days off (${DAY_NAMES.filter((_, i) => filters.daysOff & (1 << i)).join(', ')})`);

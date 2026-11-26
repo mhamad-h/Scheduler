@@ -157,6 +157,27 @@ describe('elective pools (pick N LAS)', () => {
   });
 });
 
+describe('seats', () => {
+  const withSeats = (s: Section, rem: number) => ({ ...s, seats: [30, 30 - rem, rem] as [number, number, number] });
+  const full = withSeats(sec('BIO', '201', 'Lecture', M | W, 540, 615, ['Prof X']), 0);
+  const open = { ...withSeats(sec('BIO', '201', 'Lecture', M | W, 540, 615), 12), ins: full.ins }; // same time & prof
+  const other = withSeats(sec('BIO', '201', 'Lecture', T | R, 540, 615), 0);
+
+  it('shows the equivalent section with the most seats left first', () => {
+    const r = run([full, open, other], [course('BIO 201')]);
+    const cand = r.candidates.find((c) => c.crns.includes(full.crn))!;
+    expect(cand.crns[0]).toBe(open.crn);
+  });
+
+  it('hide full sections drops sections with no seats left', () => {
+    const r = run([full, open, other], [course('BIO 201')], noFilters({ hideFull: true }));
+    expect(r.total).toBe(1);
+    expect(crnsOf(r, 0)).toEqual([open.crn]);
+    const none = run([full, other], [course('BIO 201')], noFilters({ hideFull: true }));
+    expect(none.diagnosis?.message).toMatch(/they are full/);
+  });
+});
+
 describe('split credits (COE 211: 4+0 or 3+1)', () => {
   const withCr = (s: Section, cr: number) => ({ ...s, cr });
   const lec4 = withCr(sec('COE', '211', 'Lecture', M | W, 540, 615), 4);
@@ -217,6 +238,19 @@ describe('ranking prefers fewer campus days', () => {
     expect(r.patterns[T | R]).toBeUndefined();
     expect(r.patterns[M | T | W | R | F]).toBeGreaterThan(0);
     expect(Object.values(r.patterns).reduce((a, b) => a + b, 0)).toBe(r.total);
+  });
+
+  it('a day-pattern choice keeps exactly that pattern, and still reports every pattern', () => {
+    const all = [a1, a2, b1, b2, c1, c2];
+    const keys = [course('AAA 101'), course('BBB 101'), course('CCC 101')];
+    const week = M | T | W | R | F;
+    const p = run(all, keys, noFilters({ dayPattern: week }));
+    expect(p.total).toBe(r.patterns[week]);
+    for (const s of p.schedules) expect(s.dayMask).toBe(week); // not the 3-day MWF one, even though it ranks better
+    expect(p.patterns).toEqual(r.patterns);
+    const none = run(all, keys, noFilters({ dayPattern: T | R }));
+    expect(none.total).toBe(0);
+    expect(none.diagnosis?.message).toMatch(/exactly TR/);
   });
 });
 

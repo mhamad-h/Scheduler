@@ -11,7 +11,7 @@ export class BannerClient {
     return [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ');
   }
 
-  private async request(path: string, body?: string, referer?: string, attempt = 1): Promise<string> {
+  private async request(path: string, body?: string, referer?: string, attempt = 1, timeoutMs = 90_000): Promise<string> {
     const headers: Record<string, string> = {
       'User-Agent': UA,
       'Accept-Language': 'en-US,en;q=0.9',
@@ -24,7 +24,7 @@ export class BannerClient {
         method: body === undefined ? 'GET' : 'POST',
         headers,
         body,
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       for (const c of res.headers.getSetCookie?.() ?? []) {
         const [pair] = c.split(';');
@@ -44,7 +44,7 @@ export class BannerClient {
     } catch (err) {
       if (attempt >= 4) throw err;
       await new Promise((r) => setTimeout(r, 1500 * attempt));
-      return this.request(path, body, referer, attempt + 1);
+      return this.request(path, body, referer, attempt + 1, timeoutMs);
     }
   }
 
@@ -61,17 +61,28 @@ export class BannerClient {
   }
 
   searchSubject(term: string, subj: string) {
+    return this.searchSubjects(term, [subj]);
+  }
+
+  /** Several subjects (or all of them) in one search — one big page instead of one request each. */
+  searchSubjects(term: string, subjects: string[], timeoutMs = 90_000) {
     const p = new URLSearchParams();
     p.append('term_in', term);
     for (const k of ['sel_subj', 'sel_day', 'sel_schd', 'sel_insm', 'sel_camp', 'sel_levl', 'sel_sess', 'sel_instr', 'sel_ptrm', 'sel_attr'])
       p.append(k, 'dummy');
-    p.append('sel_subj', subj);
+    for (const subj of subjects) p.append('sel_subj', subj);
     const rest: [string, string][] = [
       ['sel_crse', ''], ['sel_title', ''], ['sel_schd', '%'], ['sel_insm', '%'], ['sel_from_cred', ''], ['sel_to_cred', ''],
       ['sel_camp', '%'], ['sel_levl', '%'], ['sel_ptrm', '%'], ['sel_instr', '%'], ['sel_sess', '%'], ['sel_attr', '%'],
       ['begin_hh', '0'], ['begin_mi', '0'], ['begin_ap', 'a'], ['end_hh', '0'], ['end_mi', '0'], ['end_ap', 'a'],
     ];
     for (const [k, v] of rest) p.append(k, v);
-    return this.request('bwckschd.p_get_crse_unsec', p.toString(), `${BASE}/bwckgens.p_proc_term_date`);
+    // a multi-subject search gets 2 tries (not 4): if it keeps failing, the caller falls back to one subject at a time
+    return this.request('bwckschd.p_get_crse_unsec', p.toString(), `${BASE}/bwckgens.p_proc_term_date`, subjects.length > 1 ? 3 : 1, timeoutMs);
+  }
+
+  /** "Detailed Class Information" for one section: seat capacity / registered / remaining. */
+  detail(term: string, crn: string) {
+    return this.request(`bwckschd.p_disp_detail_sched?term_in=${encodeURIComponent(term)}&crn_in=${encodeURIComponent(crn)}`);
   }
 }

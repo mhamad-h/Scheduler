@@ -22,6 +22,7 @@ A fast, good-looking class scheduler for Lebanese American University. Add the c
   - Shows final exam and one-off dates, and warns when two exams clash.
 - **Saved slots (A, B, C…).** Rename, reorder, swap sections, copy one slot's CRNs or all of them (space, comma or newline separated), and share a link.
 - **Fast.** The solver runs in a Web Worker and checks conflicts with bitsets. Sections with identical times and instructor are merged, and their alternate CRNs are shown in case one fills up.
+- **Seats.** Capacity, registered and remaining seats for every section of the two newest terms, refreshed every 12 hours. Full sections are flagged, the "or" CRNs show their own seats, and **Hide full sections** keeps them out of results. Seats move fast during registration, so confirm on Banner.
 - Light and dark themes, works on phones, and everything is stored locally in your browser.
 
 ## How the data is fetched
@@ -30,7 +31,8 @@ LAU's Banner 8 "Dynamic Schedule" pages are public but send no CORS headers, so 
 
 1. `GET  /prod/bwckschd.p_disp_dyn_sched`: term list
 2. `POST /prod/bwckgens.p_proc_term_date`: subjects for a term
-3. `POST /prod/bwckschd.p_get_crse_unsec`: sections, one subject per request, 4 at a time
+3. `POST /prod/bwckschd.p_get_crse_unsec`: sections, all subjects in one request (falls back to one subject per request, 4 at a time, if that fails or looks incomplete)
+4. `GET  /prod/bwckschd.p_disp_detail_sched`: seats, one section per request, 6 at a time (two newest terms; `--seat-terms N` or `--no-seats`)
 
 The HTML is parsed (`scraper/parse.ts`) into compact JSON in `public/data/<term>.json`, which the static site loads.
 

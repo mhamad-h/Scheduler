@@ -40,10 +40,14 @@ export interface Filters {
   daysOff: number;
   /** 0 = no limit */
   maxDays: number;
+  /** only schedules meeting on exactly these days (day bitmask, e.g. MWF); 0 / absent = any */
+  dayPattern?: number;
   blocked: TimeBlock[];
   profs: Record<string, ProfPref>;
   /** when true, sections without any meeting time are excluded */
   hideUnscheduled: boolean;
+  /** when true, sections Banner reports as full (0 seats left) are excluded */
+  hideFull?: boolean;
   /** allow Beirut and Byblos sections in one schedule (online always mixes) */
   mixCampuses?: boolean;
 }

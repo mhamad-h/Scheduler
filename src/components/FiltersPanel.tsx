@@ -62,6 +62,7 @@ export function FiltersPanel({ filters }: { filters: Filters }) {
       </div>
 
       <div className="space-y-0.5 border-t border-line pt-3">
+        <Toggle checked={!!filters.hideFull} onChange={(v) => setFilters({ hideFull: v })} label="Hide full sections" />
         <Toggle checked={filters.hideUnscheduled} onChange={(v) => setFilters({ hideUnscheduled: v })} label="Hide sections with no set time" />
       </div>
 

@@ -7,6 +7,41 @@ import { conflictsWith, creditMismatch, datedSessions, findTrade } from '../lib/
 import { joinCrns, useStore } from '../state/store.ts';
 import type { CrnSort } from '../state/store.ts';
 import { copyText, cx, Icon, Segmented } from './ui.tsx';
+import { noSeats, seatLabel, seatShort, seatState } from '../lib/seats.ts';
+import { timeAgo } from '../lib/time.ts';
+
+const SEAT_TONE = { open: 'text-accent-text', low: 'text-warn', full: 'text-danger', closed: 'text-danger', unknown: 'text-faint' } as const;
+
+/** "12 left" / "Full" with capacity — the numbers Banner showed at the last check. */
+export function SeatBadge({ s, compact }: { s: Section; compact?: boolean }) {
+  const st = seatState(s);
+  if (!s.seats) return <span className="text-xs text-faint" title={seatLabel(s)}>—</span>;
+  const [cap] = s.seats;
+  return (
+    <span className={cx('whitespace-nowrap text-xs', SEAT_TONE[st])} title={seatLabel(s)}>
+      <b className="font-semibold">{seatShort(s)}</b>
+      {!compact && st !== 'closed' && <span className="text-faint"> / {cap}</span>}
+      {!compact && st === 'full' && s.wl && <span className="block text-[10px] text-faint">waitlist {s.wl[1]}/{s.wl[0]}</span>}
+    </span>
+  );
+}
+
+/** "or 21812 (5 left)" — sections you could register instead with no other change. */
+function Alternates({ alt }: { alt: Section[] }) {
+  return (
+    <>
+      or{' '}
+      {alt.slice(0, 3).map((a, i) => (
+        <span key={a.crn} title={seatLabel(a)}>
+          {i > 0 && ', '}
+          {a.crn}
+          {a.seats && <span className={SEAT_TONE[seatState(a)]}> ({seatShort(a).toLowerCase()})</span>}
+        </span>
+      ))}
+      {alt.length > 3 ? '…' : ''}
+    </>
+  );
+}
 
 const TYPE_RANK = ['Lecture', 'Lab', 'Recitation', 'Tutorial', 'Studio', 'Seminar'];
 const typeRank = (t: string) => (TYPE_RANK.indexOf(t) + 99) % 99;
@@ -41,9 +76,12 @@ export function CrnTable({
   order,
   selected,
   onSelect,
+  seatsAt,
 }: {
   view: ScheduleView;
   hues: Record<string, number>;
+  /** when Banner's seat numbers were last read (absent = this term has no seat data) */
+  seatsAt?: string;
   /** the user's course list, used for "course order" */
   order: string[];
   selected: string | null;
@@ -53,6 +91,7 @@ export function CrnTable({
   const setCrnSort = useStore((s) => s.setCrnSort);
   const sorted = useMemo(() => sortSections(view.sections, order, mode), [view.sections, order, mode]);
   const auto = (s: Section) => order.length > 0 && !order.includes(courseKey(s));
+  const full = view.sections.filter(noSeats);
   return (
     <>
     <div className="mb-2 flex items-center justify-between gap-3">
@@ -71,6 +110,34 @@ export function CrnTable({
         />
       </div>
     </div>
+    {seatsAt && (
+      <div className="mb-3 space-y-2">
+        <p className="flex items-start gap-1.5 text-[11px] text-muted">
+          <Icon name="info" className="mt-px size-3.5 shrink-0" />
+          <span>
+            Seats are from Banner, checked {timeAgo(seatsAt)}. They change fast once registration opens, so confirm on Banner before you register.
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+              On the calendar:
+              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-accent" />seats left</span>
+              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-warn" />only a few</span>
+              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-danger" />full or closed</span>
+            </span>
+          </span>
+        </p>
+        {full.length > 0 && (
+          <div className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
+            <Icon name="alert" className="mt-px size-4 shrink-0" />
+            <span>
+              <b className="font-semibold">
+                {full.length === 1 ? '1 section has' : `${full.length} sections have`} no seats left:{' '}
+                {full.map((s) => `${courseKey(s)}${s.type !== 'Lecture' ? ' ' + s.type.toLowerCase() : ''} (${s.crn}, ${seatShort(s).toLowerCase()})`).join(', ')}.
+              </b>{' '}
+              Use an "or" CRN with seats if there is one, tap the class to swap it, or turn on <b className="font-semibold">Hide full sections</b> in Filters.
+            </span>
+          </div>
+        )}
+      </div>
+    )}
     {/* phones: stacked cards */}
     <div className="space-y-2 sm:hidden">
       {sorted.map((s) => {
@@ -95,17 +162,20 @@ export function CrnTable({
                 </div>
                 <div className="truncate text-xs text-muted">{s.title}</div>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  copyText(s.crn, `Copied CRN ${s.crn}`);
-                }}
-                className="inline-flex items-center gap-1 rounded-lg bg-surface-2 px-2.5 py-1.5 font-mono text-sm font-medium active:bg-accent-soft"
-                aria-label={`Copy CRN ${s.crn}`}
-              >
-                {s.crn}
-                <Icon name="copy" className="size-3.5 text-muted" />
-              </button>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyText(s.crn, `Copied CRN ${s.crn}`);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg bg-surface-2 px-2.5 py-1.5 font-mono text-sm font-medium active:bg-accent-soft"
+                  aria-label={`Copy CRN ${s.crn}`}
+                >
+                  {s.crn}
+                  <Icon name="copy" className="size-3.5 text-muted" />
+                </button>
+                {seatsAt && <SeatBadge s={s} />}
+              </div>
             </div>
             <div className="mt-2 space-y-0.5 pl-4 text-xs">
               {s.m.length ? (
@@ -121,18 +191,23 @@ export function CrnTable({
               <div className="truncate text-muted">
                 {s.ins.length ? s.ins.join(', ') : 'Instructor TBA'} · {rooms || s.campus}
               </div>
-              {alt && <div className="text-[11px] text-faint">Same time & instructor: {alt.join(', ')}</div>}
+              {alt && (
+                <div className="text-[11px] text-faint">
+                  Same time & instructor: <Alternates alt={alt} />
+                </div>
+              )}
             </div>
           </div>
         );
       })}
     </div>
     <div className="scrollbar-thin overflow-x-auto max-sm:hidden">
-      <table className="w-full min-w-[620px] text-sm">
+      <table className={cx('w-full text-sm', seatsAt ? 'min-w-[700px]' : 'min-w-[620px]')}>
         <thead>
           <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-faint">
             <th className="py-2 pl-1 font-medium">Course</th>
             <th className="py-2 font-medium">CRN</th>
+            {seatsAt && <th className="py-2 pr-3 font-medium">Seats</th>}
             <th className="py-2 font-medium">Sec</th>
             <th className="py-2 font-medium">When</th>
             <th className="py-2 font-medium">Instructor</th>
@@ -172,11 +247,15 @@ export function CrnTable({
                   </button>
                   {alt && (
                     <div className="px-1 text-[10px] text-faint" title="Identical time and instructor — use if the first is full">
-                      or {alt.slice(0, 3).join(', ')}
-                      {alt.length > 3 ? '…' : ''}
+                      <Alternates alt={alt} />
                     </div>
                   )}
                 </td>
+                {seatsAt && (
+                  <td className="py-2 pr-3">
+                    <SeatBadge s={s} />
+                  </td>
+                )}
                 <td className="py-2 font-mono text-xs text-muted">{s.sec}</td>
                 <td className="py-2 text-xs">
                   {s.m.length ? (
@@ -265,23 +344,48 @@ export function SwapPanel({
   const when = (s: Section) => s.m.map((m) => `${fmtDays(m.d)} ${fmtTime(m.s)}`).join(', ') || 'no set time';
 
   return (
-    <div className="animate-pop rounded-xl border border-line bg-surface p-3" style={{ ['--h' as string]: hues[key] ?? 210 }}>
-      <div className="mb-2 flex items-center gap-2">
-        <Icon name="swap" className="size-4 text-muted" />
-        <div className="flex-1 text-sm">
-          {isPool ? (
-            <>
-              Swap elective <span className="font-mono font-medium">{key}</span> <span className="text-muted">for another {selected.subj} course</span>
-            </>
-          ) : (
-            <>
-              Swap <span className="font-mono font-medium">{key}</span> {selected.type !== 'Lecture' && selected.type.toLowerCase()} <span className="text-muted">(section {selected.sec})</span>
-            </>
-          )}
+    <div id="class-details" className="animate-pop scroll-mt-20 rounded-xl border border-line bg-surface p-3" style={{ ['--h' as string]: hues[key] ?? 210 }}>
+      {/* the tapped class in full: everything the calendar box has no room for */}
+      <div className="mb-3 flex items-start gap-2.5 border-b border-line pb-3">
+        <span className="course-dot mt-1.5 size-2.5 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="font-mono text-sm font-semibold">{key}</span>
+            {selected.type !== 'Lecture' && <span className="rounded bg-surface-2 px-1 text-[10px] text-muted">{selected.type}</span>}
+            <span className="text-[11px] text-faint">section {selected.sec}</span>
+          </div>
+          <div className="truncate text-xs text-muted">{selected.title}</div>
+          <div className="mt-1.5 space-y-0.5 text-xs">
+            {selected.m.length ? (
+              selected.m.map((m, i) => (
+                <div key={i}>
+                  <b className="font-medium">{fmtDays(m.d)}</b> {fmtTime(m.s)}–{fmtTime(m.e)}
+                  {m.r && <span className="text-muted"> · {m.r}</span>}
+                  {m.dt && <span className="text-faint"> ({m.dt})</span>}
+                </div>
+              ))
+            ) : (
+              <div className="italic text-muted">No set time</div>
+            )}
+            <div className="text-muted">{selected.ins.length ? selected.ins.join(', ') : 'Instructor TBA'}</div>
+            {selected.seats && <div className={cx('font-medium', SEAT_TONE[seatState(selected)])}>{seatLabel(selected)}</div>}
+          </div>
         </div>
-        <button onClick={onClose} className="rounded p-1 text-muted hover:text-ink" aria-label="Close">
+        <button
+          onClick={() => copyText(selected.crn, `Copied CRN ${selected.crn}`)}
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-surface-2 px-2 py-1 font-mono text-[13px] font-medium hover:bg-accent-soft"
+          title="Copy CRN"
+        >
+          {selected.crn}
+          <Icon name="copy" className="size-3.5 text-muted" />
+        </button>
+        <button onClick={onClose} className="shrink-0 rounded p-1 text-muted hover:text-ink" aria-label="Close">
           <Icon name="x" />
         </button>
+      </div>
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
+        <Icon name="swap" className="size-3.5" />
+        {isPool ? `Swap for another ${selected.subj} course` : `Swap for another ${selected.type.toLowerCase()} section`}
       </div>
       {options.length === 0 && <p className="text-xs text-muted">No other sections of this {selected.type.toLowerCase()}.</p>}
       <div className="scrollbar-thin max-h-56 space-y-1 overflow-y-auto">
@@ -328,7 +432,10 @@ export function SwapPanel({
                 {s.campus} campus · <span className="font-mono">{s.crn}</span>
               </span>
             ) : (
-              <span className="font-mono text-faint">{s.crn}</span>
+              <span className="flex shrink-0 flex-col items-end">
+                <span className="font-mono text-faint">{s.crn}</span>
+                {s.seats && <SeatBadge s={s} compact />}
+              </span>
             )}
           </button>
         ))}

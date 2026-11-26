@@ -38,12 +38,18 @@ export interface Section {
   /** one-off meetings (a single date) — shown, but never used for conflicts */
   x?: Meeting[];
   lvl?: string;
+  /** seats from Banner: [capacity, registered, remaining] (newest terms only) */
+  seats?: [number, number, number];
+  /** waitlist: [capacity, waiting, remaining], only when the section has a waitlist */
+  wl?: [number, number, number];
 }
 
 export interface TermData {
   term: string;
   name: string;
   updatedAt: string;
+  /** when seat numbers were last read from Banner (absent = no seat data for this term) */
+  seatsAt?: string;
   sections: Section[];
 }
 
@@ -53,6 +59,8 @@ export interface TermInfo {
   updatedAt: string;
   sections: number;
   courses: number;
+  /** when seat numbers were last read from Banner */
+  seatsAt?: string;
 }
 
 export const courseKey = (s: Pick<Section, 'subj' | 'num'>) => `${s.subj} ${s.num}`;

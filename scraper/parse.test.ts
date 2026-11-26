@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseDateRange, parseDays, parseInstructors, parseSections, parseTime } from './parse.ts';
+import { parseDateRange, parseDays, parseInstructors, parseSeats, parseSections, parseTime } from './parse.ts';
 
 const fx = (n: string) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', `${n}.html`), 'utf8');
 
@@ -59,5 +59,15 @@ describe('parseSections on live fixtures', () => {
     const all = ['MTH', 'PHY', 'BUS', 'CSC'].flatMap((s) => parseSections(fx(s)));
     for (const s of all) for (const x of s.x ?? []) expect(x.dt).toBeTruthy();
     for (const s of all) for (const m of s.m) expect(m.dt === undefined || m.dt.includes('–')).toBe(true);
+  });
+});
+
+describe('parseSeats', () => {
+  it('reads capacity / registered / remaining from a detail page', () => {
+    // MTH 201 sec 32, Spring 2027, before registration opened
+    expect(parseSeats(fx('detail'))).toEqual({ seats: [40, 0, 40], waitlist: [15, 0, 15] });
+  });
+  it('returns null for anything without a seating table', () => {
+    expect(parseSeats('<html><body>Please enable JavaScript</body></html>')).toBeNull();
   });
 });

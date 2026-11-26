@@ -3,12 +3,13 @@ import { courseKey } from '../data/types.ts';
 import type { Course, TermIndex } from '../data/load.ts';
 import type { Features, ProfPref, SolveResult } from '../solver/model.ts';
 import { computeFeatures, meetingsOverlap } from '../solver/solve.ts';
+import { seatRank } from './seats.ts';
 
 /** A concrete schedule as displayed: one section per (course, type), plus equivalent alternates. */
 export interface ScheduleView {
   sections: Section[];
-  /** crn -> other CRNs with identical time/instructor */
-  alternates: Record<string, string[]>;
+  /** crn -> other sections with identical time, instructor, campus and credits (most seats left first) */
+  alternates: Record<string, Section[]>;
   f: Features;
   /** CRNs from a saved slot that no longer exist in the term data */
   missing: string[];
@@ -26,22 +27,31 @@ export function featuresFor(sections: Section[], profs: Record<string, ProfPref>
   });
 }
 
+const signature = (s: Section) =>
+  [courseKey(s), s.type, s.cr, s.campus, s.ins.join(','), s.m.map((m) => `${m.d}.${m.s}.${m.e}.${m.dt ?? ''}`).sort().join(';')].join('|');
+
+/** For each section: other sections of its course you could register instead with no change at all. */
+export function alternatesFor(sections: Section[], index: TermIndex): Record<string, Section[]> {
+  const out: Record<string, Section[]> = {};
+  for (const s of sections) {
+    const sig = signature(s);
+    const alt = (index.byKey.get(courseKey(s))?.sections ?? [])
+      .filter((o) => o.crn !== s.crn && signature(o) === sig)
+      .sort((a, b) => seatRank(b) - seatRank(a));
+    if (alt.length) out[s.crn] = alt;
+  }
+  return out;
+}
+
 export function viewFromResult(r: SolveResult, idx: number, index: TermIndex): ScheduleView {
   const s = r.schedules[idx];
   const sections: Section[] = [];
-  const alternates: Record<string, string[]> = {};
   s.picks.forEach((p, g) => {
     if (p < 0) return;
-    const c = r.candidates[p];
-    const pooled = s.poolPick?.[g];
-    const sec = index.byCrn.get(pooled ?? c.crns[0]);
-    if (!sec) return;
-    sections.push(sec);
-    // alternates = same course, same time (for pool slots, other topics at this time are offered via swap)
-    const alt = c.crns.filter((x) => x !== sec.crn && (!pooled || courseKey(index.byCrn.get(x)!) === courseKey(sec)));
-    if (alt.length) alternates[sec.crn] = alt;
+    const sec = index.byCrn.get(s.poolPick?.[g] ?? r.candidates[p].crns[0]);
+    if (sec) sections.push(sec);
   });
-  return { sections, alternates, f: s.f, missing: [] };
+  return { sections, alternates: alternatesFor(sections, index), f: s.f, missing: [] };
 }
 
 export function viewFromCrns(crns: string[], index: TermIndex, profs: Record<string, ProfPref>): ScheduleView {
@@ -52,7 +62,7 @@ export function viewFromCrns(crns: string[], index: TermIndex, profs: Record<str
     if (s) sections.push(s);
     else missing.push(c);
   }
-  return { sections, alternates: {}, f: featuresFor(sections, profs), missing };
+  return { sections, alternates: alternatesFor(sections, index), f: featuresFor(sections, profs), missing };
 }
 
 export function conflictsWith(s: Section, others: Section[]): Section | undefined {
