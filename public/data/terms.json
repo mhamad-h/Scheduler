@@ -1,21 +1,21 @@
 {
- "generatedAt": "2026-11-26T21:49:45.923Z",
+ "generatedAt": "2026-11-27T08:50:14.493Z",
  "terms": [
   {
    "code": "202720",
    "name": "Spring 2027",
-   "updatedAt": "2026-11-26T21:42:35.226Z",
-   "sections": 2299,
-   "courses": 889,
-   "seatsAt": "2026-11-26T21:42:35.226Z"
+   "updatedAt": "2026-11-27T08:43:36.290Z",
+   "sections": 2305,
+   "courses": 894,
+   "seatsAt": "2026-11-27T08:43:36.290Z"
   },
   {
    "code": "202710",
    "name": "Fall 2026",
-   "updatedAt": "2026-11-26T14:04:18.003Z",
+   "updatedAt": "2026-11-27T08:50:05.735Z",
    "sections": 2602,
    "courses": 976,
-   "seatsAt": "2026-11-26T21:49:36.025Z"
+   "seatsAt": "2026-11-27T08:50:05.735Z"
   },
   {
    "code": "202630",
